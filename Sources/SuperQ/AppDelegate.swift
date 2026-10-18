@@ -2,12 +2,57 @@ import Cocoa
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
     private var statusItem: NSStatusItem!
     private let logger = Logger(subsystem: "com.antigravity.superq", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Run as menu bar only agent (no Dock icon)
+        AppDelegate.shared = self
+
+        // If an instance of SuperQ is already running, tell it to show the window and exit this duplicate process
+        let myPid = ProcessInfo.processInfo.processIdentifier
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.antigravity.superq"
+        let runningWithBundle = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        let others: [NSRunningApplication]
+        if !runningWithBundle.isEmpty {
+            others = runningWithBundle.filter { $0.processIdentifier != myPid }
+        } else {
+            others = NSWorkspace.shared.runningApplications.filter {
+                $0.processIdentifier != myPid && ($0.localizedName == "SuperQ" || $0.bundleIdentifier == "com.antigravity.superq")
+            }
+        }
+
+        if let existing = others.first {
+            logger.info("Existing SuperQ instance detected (PID \(existing.processIdentifier)). Notifying to open window.")
+            DistributedNotificationCenter.default().postNotificationName(
+                NSNotification.Name("com.antigravity.superq.reopenWindow"),
+                object: nil,
+                userInfo: nil,
+                deliverImmediately: true
+            )
+            existing.activate(options: [.activateIgnoringOtherApps])
+            exit(0)
+        }
+
+        // Run as menu bar only accessory app (no permanent Dock icon)
         NSApp.setActivationPolicy(.accessory)
+
+        // Listen for distributed reopen requests from secondary launches
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleDistributedReopen),
+            name: NSNotification.Name("com.antigravity.superq.reopenWindow"),
+            object: nil
+        )
+
+        // Listen for settings changed from the window
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSettingsChanged),
+            name: NSNotification.Name("SuperQSettingsChanged"),
+            object: nil
+        )
 
         setupStatusItem()
 
@@ -18,10 +63,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         ShortcutRecorderWindowController.shared.onShortcutSaved = { [weak self] in
             self?.buildMenu()
+            MainWindowController.shared.updateUI()
         }
 
-        logger.info("SuperQ ready.")
+        logger.info("SuperQ ready. Running in menu bar.")
     }
+
+    // MARK: - Reopen Handling (Open app while already running)
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        logger.info("applicationShouldHandleReopen triggered - opening SuperQ window")
+        openMainWindow()
+        return true
+    }
+
+    @objc private func handleDistributedReopen() {
+        DispatchQueue.main.async { [weak self] in
+            self?.openMainWindow()
+        }
+    }
+
+    @objc func openMainWindow() {
+        MainWindowController.shared.show()
+    }
+
+    @objc private func handleSettingsChanged() {
+        buildMenu()
+    }
+
+    // MARK: - Status Bar Setup
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -34,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
     }
 
-    private func buildMenu() {
+    func buildMenu() {
         let currentShortcut = SettingsManager.shared.shortcutDisplay
         if let button = statusItem?.button {
             button.toolTip = "SuperQ (\(currentShortcut) to Force Quit)"
@@ -51,11 +121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         forceQuitItem.target = self
         menu.addItem(forceQuitItem)
 
+        // 2. Open SuperQ Window (for users who prefer a window over the menu bar)
+        let openWindowItem = NSMenuItem(
+            title: "Open SuperQ Window...",
+            action: #selector(openMainWindow),
+            keyEquivalent: "o"
+        )
+        openWindowItem.target = self
+        menu.addItem(openWindowItem)
+
         menu.addItem(NSMenuItem.separator())
 
-        // 2. Shortcut Submenu
+        // 3. Shortcut Submenu
         let shortcutMenu = NSMenu()
-
         let currentPresetId = SettingsManager.shared.currentPresetId
 
         for preset in ShortcutPreset.allCases {
@@ -97,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        // 3. Play Sound toggle
+        // 4. Play Sound toggle
         let soundItem = NSMenuItem(
             title: "Play Sound",
             action: #selector(toggleSound),
@@ -107,7 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         soundItem.state = SettingsManager.shared.isSoundEnabled ? .on : .off
         menu.addItem(soundItem)
 
-        // 4. Show Pop-up / HUD toggle
+        // 5. Show Pop-up / HUD toggle
         let hudItem = NSMenuItem(
             title: "Show Pop-up",
             action: #selector(toggleHUD),
@@ -117,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hudItem.state = SettingsManager.shared.isHUDEnabled ? .on : .off
         menu.addItem(hudItem)
 
-        // 4b. Theme Submenu
+        // 5b. Theme Submenu
         let themeMenu = NSMenu()
         let currentTheme = SettingsManager.shared.currentTheme
 
@@ -137,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         themeParentItem.submenu = themeMenu
         menu.addItem(themeParentItem)
 
-        // 5. Launch at Login
+        // 6. Launch at Login
         let loginItem = NSMenuItem(
             title: "Launch at Login",
             action: #selector(toggleLaunchAtLogin),
@@ -149,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        // 6. Quit SuperQ
+        // 7. Quit SuperQ
         let quitItem = NSMenuItem(
             title: "Quit SuperQ",
             action: #selector(quitApp),
@@ -161,6 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    // MARK: - Actions
+
     @objc private func handleForceQuit() {
         KillManager.shared.forceQuitFrontmostApp()
     }
@@ -170,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsManager.shared.applyPreset(preset)
         HotKeyManager.shared.updateRegistration()
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func openShortcutRecorder() {
@@ -180,28 +261,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsManager.shared.resetToDefaultShortcut()
         HotKeyManager.shared.updateRegistration()
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func toggleSound() {
         SettingsManager.shared.isSoundEnabled.toggle()
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func toggleHUD() {
         SettingsManager.shared.isHUDEnabled.toggle()
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func handleSelectTheme(_ sender: NSMenuItem) {
         guard let theme = sender.representedObject as? HUDTheme else { return }
         SettingsManager.shared.currentTheme = theme
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func toggleLaunchAtLogin() {
         let current = SettingsManager.shared.isLaunchAtLoginEnabled
         _ = SettingsManager.shared.setLaunchAtLogin(enabled: !current)
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     @objc private func quitApp() {
