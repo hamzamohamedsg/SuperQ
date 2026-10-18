@@ -90,6 +90,38 @@ final class KillManager {
     }
 
     private func playKillSound() {
+        if SettingsManager.shared.currentTheme == .windows95 {
+            playWindowsChime()
+        } else {
+            playModernSound()
+        }
+    }
+
+    private func playWindowsChime() {
+        let candidatePaths = [
+            Bundle.main.path(forResource: "windows-2000-chimes", ofType: "mp3"),
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/windows-2000-chimes.mp3").path,
+            "Resources/windows-2000-chimes.mp3",
+            "/Users/mmtechstore/Downloads/windows-2000-chimes.mp3"
+        ].compactMap { $0 }
+
+        for path in candidatePaths where FileManager.default.fileExists(atPath: path) {
+            if let sound = NSSound(contentsOfFile: path, byReference: true) {
+                sound.play()
+                return
+            } else {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+                task.arguments = [path]
+                try? task.run()
+                return
+            }
+        }
+
+        playModernSound()
+    }
+
+    private func playModernSound() {
         // Use Funk or Pop or Tink for a pleasant, subtle confirmation sound
         if let sound = NSSound(named: "Funk") {
             sound.play()
