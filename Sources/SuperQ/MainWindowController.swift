@@ -1,6 +1,27 @@
 import Cocoa
 import os
 
+final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+final class CardView: NSView {
+    override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.5).cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 final class MainWindowController: NSWindowController, NSWindowDelegate {
     static let shared = MainWindowController()
     private let logger = Logger(subsystem: "com.antigravity.superq", category: "MainWindowController")
@@ -15,7 +36,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 512),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -34,62 +55,41 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func setupUI() {
-        guard let window = window, let contentView = window.contentView else { return }
+        guard let window = window else { return }
 
-        // Root vertical stack
-        let rootStack = NSStackView()
-        rootStack.orientation = .vertical
-        rootStack.alignment = .leading
-        rootStack.spacing = 14
-        rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 20, right: 24)
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(rootStack)
+        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: 440, height: 512))
+        window.contentView = container
 
-        NSLayoutConstraint.activate([
-            rootStack.topAnchor.constraint(equalTo: contentView.topAnchor),
-            rootStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            rootStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
-        ])
+        // 1. Header (y: 16, height: 50)
+        let headerView = createHeaderView(frame: NSRect(x: 20, y: 16, width: 400, height: 50))
+        container.addSubview(headerView)
 
-        // 1. Header (Icon + Title + Subtitle + Status)
-        let headerView = createHeaderView()
-        rootStack.addArrangedSubview(headerView)
-        headerView.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: -48).isActive = true
+        // 2. Action Card (y: 76, height: 76)
+        let actionCard = createActionCard(frame: NSRect(x: 20, y: 76, width: 400, height: 76))
+        container.addSubview(actionCard)
 
-        // 2. Action Card (Force Quit button)
-        let actionCard = createActionCard()
-        rootStack.addArrangedSubview(actionCard)
-        actionCard.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: -48).isActive = true
+        // 3. Shortcut Card (y: 162, height: 122)
+        let shortcutCard = createShortcutCard(frame: NSRect(x: 20, y: 162, width: 400, height: 122))
+        container.addSubview(shortcutCard)
 
-        // 3. Shortcut Card
-        let shortcutCard = createShortcutCard()
-        rootStack.addArrangedSubview(shortcutCard)
-        shortcutCard.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: -48).isActive = true
+        // 4. Preferences Card (y: 294, height: 140)
+        let preferencesCard = createPreferencesCard(frame: NSRect(x: 20, y: 294, width: 400, height: 140))
+        container.addSubview(preferencesCard)
 
-        // 4. Preferences Card (Sound, HUD, Theme, Login)
-        let preferencesCard = createPreferencesCard()
-        rootStack.addArrangedSubview(preferencesCard)
-        preferencesCard.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: -48).isActive = true
-
-        // 5. Footer (Quit & Close)
-        let footerView = createFooterView()
-        rootStack.addArrangedSubview(footerView)
-        footerView.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: -48).isActive = true
+        // 5. Footer (y: 446, height: 54)
+        createFooterView(in: container)
 
         updateUI()
     }
 
-    // MARK: - Subview Builders
+    // MARK: - View Builders
 
-    private func createHeaderView() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
+    private func createHeaderView(frame: NSRect) -> NSView {
+        let view = FlippedView(frame: frame)
 
         // App Icon
-        let iconView = NSImageView()
+        let iconView = NSImageView(frame: NSRect(x: 0, y: 2, width: 46, height: 46))
         iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.translatesAutoresizingMaskIntoConstraints = false
         if let icon = NSApp.applicationIconImage {
             iconView.image = icon
         } else if let path = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
@@ -98,268 +98,184 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         } else {
             iconView.image = NSImage(systemSymbolName: "xmark.app.fill", accessibilityDescription: "SuperQ")
         }
-        container.addSubview(iconView)
+        view.addSubview(iconView)
 
-        // Text vertical stack
+        // App Title
         let titleLabel = NSTextField(labelWithString: "SuperQ")
-        titleLabel.font = NSFont.systemFont(ofSize: 20, weight: .bold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.frame = NSRect(x: 58, y: 2, width: 180, height: 24)
+        titleLabel.font = NSFont.systemFont(ofSize: 19, weight: .bold)
+        view.addSubview(titleLabel)
 
+        // Subtitle
         let subtitleLabel = NSTextField(labelWithString: "Instant Force-Quit for macOS")
+        subtitleLabel.frame = NSRect(x: 58, y: 26, width: 200, height: 16)
         subtitleLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         subtitleLabel.textColor = .secondaryLabelColor
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(subtitleLabel)
 
-        let statusLabel = NSTextField(labelWithString: "● Active in Menu Bar")
-        statusLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        statusLabel.textColor = NSColor.systemGreen
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Status badge pill
+        let statusBadge = FlippedView(frame: NSRect(x: 266, y: 12, width: 134, height: 26))
+        statusBadge.wantsLayer = true
+        statusBadge.layer?.cornerRadius = 13
+        statusBadge.layer?.borderWidth = 1
+        statusBadge.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.35).cgColor
+        statusBadge.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.12).cgColor
 
-        container.addSubview(titleLabel)
-        container.addSubview(subtitleLabel)
-        container.addSubview(statusLabel)
+        let statusText = NSTextField(labelWithString: "● Active in Menu")
+        statusText.frame = NSRect(x: 8, y: 5, width: 118, height: 16)
+        statusText.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        statusText.textColor = NSColor.systemGreen
+        statusBadge.addSubview(statusText)
 
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            iconView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 48),
-            iconView.heightAnchor.constraint(equalToConstant: 48),
-
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 14),
-
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
-            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-
-            statusLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 4),
-            statusLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            statusLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-
-        return container
+        view.addSubview(statusBadge)
+        return view
     }
 
-    private func createActionCard() -> NSBox {
-        let box = NSBox()
-        box.boxType = .custom
-        box.borderColor = NSColor.separatorColor
-        box.borderWidth = 1
-        box.cornerRadius = 8
-        box.fillColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6)
-        box.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        box.contentView = stack
-
-        let buttonRow = NSStackView()
-        buttonRow.orientation = .horizontal
-        buttonRow.spacing = 10
-        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+    private func createActionCard(frame: NSRect) -> CardView {
+        let card = CardView(frame: frame)
 
         let forceQuitButton = NSButton(title: "Force Quit Active App", target: self, action: #selector(handleForceQuitAction))
+        forceQuitButton.frame = NSRect(x: 12, y: 12, width: 216, height: 32)
         forceQuitButton.bezelStyle = .rounded
         forceQuitButton.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        forceQuitButton.translatesAutoresizingMaskIntoConstraints = false
-        buttonRow.addArrangedSubview(forceQuitButton)
+        card.addSubview(forceQuitButton)
 
         let testButton = NSButton(title: "Test Pop-up & Audio", target: self, action: #selector(handleTestFeedback))
+        testButton.frame = NSRect(x: 236, y: 12, width: 152, height: 32)
         testButton.bezelStyle = .rounded
         testButton.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        testButton.translatesAutoresizingMaskIntoConstraints = false
-        buttonRow.addArrangedSubview(testButton)
-
-        stack.addArrangedSubview(buttonRow)
+        card.addSubview(testButton)
 
         let caption = NSTextField(labelWithString: "Terminates the foreground application immediately with kernel SIGKILL.")
+        caption.frame = NSRect(x: 14, y: 50, width: 372, height: 16)
         caption.font = NSFont.systemFont(ofSize: 11)
         caption.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(caption)
+        card.addSubview(caption)
 
-        return box
+        return card
     }
 
-    private func createShortcutCard() -> NSBox {
-        let box = NSBox()
-        box.boxType = .custom
-        box.borderColor = NSColor.separatorColor
-        box.borderWidth = 1
-        box.cornerRadius = 8
-        box.fillColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6)
-        box.translatesAutoresizingMaskIntoConstraints = false
+    private func createShortcutCard(frame: NSRect) -> CardView {
+        let card = CardView(frame: frame)
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        box.contentView = stack
-
-        // Title row
+        // Section Title
         let titleLabel = NSTextField(labelWithString: "Force-Quit Global Shortcut")
+        titleLabel.frame = NSRect(x: 14, y: 10, width: 372, height: 18)
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(titleLabel)
+        card.addSubview(titleLabel)
 
-        // Controls row (Badge + Preset PopUp + Custom + Reset)
-        let controlsRow = NSStackView()
-        controlsRow.orientation = .horizontal
-        controlsRow.spacing = 8
-        controlsRow.alignment = .centerY
-        controlsRow.translatesAutoresizingMaskIntoConstraints = false
-
-        // Shortcut badge container
-        let badgeBox = NSView()
+        // Badge Container
+        let badgeBox = FlippedView(frame: NSRect(x: 14, y: 34, width: 66, height: 26))
         badgeBox.wantsLayer = true
         badgeBox.layer?.cornerRadius = 5
         badgeBox.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
-        badgeBox.translatesAutoresizingMaskIntoConstraints = false
 
         shortcutBadgeLabel = NSTextField(labelWithString: "⇧⌘Q")
-        shortcutBadgeLabel.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .bold)
+        shortcutBadgeLabel.frame = NSRect(x: 2, y: 4, width: 62, height: 18)
+        shortcutBadgeLabel.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
         shortcutBadgeLabel.textColor = .controlAccentColor
-        shortcutBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        shortcutBadgeLabel.alignment = .center
         badgeBox.addSubview(shortcutBadgeLabel)
-
-        NSLayoutConstraint.activate([
-            shortcutBadgeLabel.topAnchor.constraint(equalTo: badgeBox.topAnchor, constant: 3),
-            shortcutBadgeLabel.bottomAnchor.constraint(equalTo: badgeBox.bottomAnchor, constant: -3),
-            shortcutBadgeLabel.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: 8),
-            shortcutBadgeLabel.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -8)
-        ])
-        controlsRow.addArrangedSubview(badgeBox)
+        card.addSubview(badgeBox)
 
         // Preset PopUp
-        presetPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        presetPopUp = NSPopUpButton(frame: NSRect(x: 86, y: 34, width: 300, height: 26), pullsDown: false)
         presetPopUp.target = self
         presetPopUp.action = #selector(handlePresetChanged(_:))
-        presetPopUp.translatesAutoresizingMaskIntoConstraints = false
         for preset in ShortcutPreset.allCases {
             presetPopUp.addItem(withTitle: preset.displayName)
             presetPopUp.lastItem?.representedObject = preset
         }
         presetPopUp.addItem(withTitle: "Custom...")
         presetPopUp.lastItem?.representedObject = "custom"
-        controlsRow.addArrangedSubview(presetPopUp)
+        card.addSubview(presetPopUp)
 
         // Custom button
-        let customBtn = NSButton(title: "Record...", target: self, action: #selector(openRecorder))
+        let customBtn = NSButton(title: "Record Custom Shortcut...", target: self, action: #selector(openRecorder))
+        customBtn.frame = NSRect(x: 12, y: 66, width: 196, height: 28)
         customBtn.bezelStyle = .rounded
-        controlsRow.addArrangedSubview(customBtn)
+        customBtn.font = NSFont.systemFont(ofSize: 12)
+        card.addSubview(customBtn)
 
         // Reset button
-        let resetBtn = NSButton(title: "Reset", target: self, action: #selector(resetShortcut))
+        let resetBtn = NSButton(title: "Reset to Default (⇧⌘Q)", target: self, action: #selector(resetShortcut))
+        resetBtn.frame = NSRect(x: 214, y: 66, width: 174, height: 28)
         resetBtn.bezelStyle = .rounded
-        controlsRow.addArrangedSubview(resetBtn)
+        resetBtn.font = NSFont.systemFont(ofSize: 12)
+        card.addSubview(resetBtn)
 
-        stack.addArrangedSubview(controlsRow)
-
+        // Caption
         let desc = NSTextField(labelWithString: "Press this combination anywhere in macOS to instantly force quit.")
+        desc.frame = NSRect(x: 14, y: 98, width: 372, height: 16)
         desc.font = NSFont.systemFont(ofSize: 11)
         desc.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(desc)
+        card.addSubview(desc)
 
-        return box
+        return card
     }
 
-    private func createPreferencesCard() -> NSBox {
-        let box = NSBox()
-        box.boxType = .custom
-        box.borderColor = NSColor.separatorColor
-        box.borderWidth = 1
-        box.cornerRadius = 8
-        box.fillColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6)
-        box.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        box.contentView = stack
+    private func createPreferencesCard(frame: NSRect) -> CardView {
+        let card = CardView(frame: frame)
 
         let titleLabel = NSTextField(labelWithString: "Feedback & System Preferences")
+        titleLabel.frame = NSRect(x: 14, y: 10, width: 372, height: 18)
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(titleLabel)
+        card.addSubview(titleLabel)
 
         // Row 1: Play Sound Checkbox
         soundCheckbox = NSButton(checkboxWithTitle: "Play sound on termination (Windows chime / modern audio)", target: self, action: #selector(handleSoundToggled(_:)))
+        soundCheckbox.frame = NSRect(x: 14, y: 34, width: 372, height: 20)
         soundCheckbox.font = NSFont.systemFont(ofSize: 12)
-        stack.addArrangedSubview(soundCheckbox)
+        card.addSubview(soundCheckbox)
 
         // Row 2: Show HUD Checkbox
         hudCheckbox = NSButton(checkboxWithTitle: "Show visual termination pop-up / HUD", target: self, action: #selector(handleHUDToggled(_:)))
+        hudCheckbox.frame = NSRect(x: 14, y: 58, width: 372, height: 20)
         hudCheckbox.font = NSFont.systemFont(ofSize: 12)
-        stack.addArrangedSubview(hudCheckbox)
+        card.addSubview(hudCheckbox)
 
         // Row 3: Pop-up Theme Selector
-        let themeRow = NSStackView()
-        themeRow.orientation = .horizontal
-        themeRow.spacing = 8
-        themeRow.alignment = .centerY
-        themeRow.translatesAutoresizingMaskIntoConstraints = false
-
         let themeLabel = NSTextField(labelWithString: "Pop-up Theme:")
+        themeLabel.frame = NSRect(x: 14, y: 84, width: 96, height: 20)
         themeLabel.font = NSFont.systemFont(ofSize: 12)
-        themeRow.addArrangedSubview(themeLabel)
+        card.addSubview(themeLabel)
 
-        themePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        themePopUp = NSPopUpButton(frame: NSRect(x: 112, y: 82, width: 274, height: 24), pullsDown: false)
         themePopUp.target = self
         themePopUp.action = #selector(handleThemeChanged(_:))
         for theme in HUDTheme.allCases {
             themePopUp.addItem(withTitle: theme.displayName)
             themePopUp.lastItem?.representedObject = theme
         }
-        themeRow.addArrangedSubview(themePopUp)
-        stack.addArrangedSubview(themeRow)
+        card.addSubview(themePopUp)
 
         // Row 4: Launch at Login Checkbox
         launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch SuperQ automatically at login", target: self, action: #selector(handleLaunchAtLoginToggled(_:)))
+        launchAtLoginCheckbox.frame = NSRect(x: 14, y: 112, width: 372, height: 20)
         launchAtLoginCheckbox.font = NSFont.systemFont(ofSize: 12)
-        stack.addArrangedSubview(launchAtLoginCheckbox)
+        card.addSubview(launchAtLoginCheckbox)
 
-        return box
+        return card
     }
 
-    private func createFooterView() -> NSView {
-        let footer = NSView()
-        footer.translatesAutoresizingMaskIntoConstraints = false
-
+    private func createFooterView(in container: NSView) {
         let quitButton = NSButton(title: "Quit SuperQ", target: self, action: #selector(handleQuitApp))
+        quitButton.frame = NSRect(x: 20, y: 446, width: 115, height: 32)
         quitButton.bezelStyle = .rounded
-        quitButton.translatesAutoresizingMaskIntoConstraints = false
-        footer.addSubview(quitButton)
+        container.addSubview(quitButton)
 
         let closeButton = NSButton(title: "Close Window", target: self, action: #selector(handleCloseWindow))
+        closeButton.frame = NSRect(x: 305, y: 446, width: 115, height: 32)
         closeButton.bezelStyle = .rounded
         closeButton.keyEquivalent = "\u{1b}" // Escape key
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        footer.addSubview(closeButton)
+        container.addSubview(closeButton)
 
         let helperLabel = NSTextField(labelWithString: "SuperQ remains active in the menu bar when this window is closed.")
+        helperLabel.frame = NSRect(x: 20, y: 484, width: 400, height: 16)
         helperLabel.font = NSFont.systemFont(ofSize: 10)
         helperLabel.textColor = .secondaryLabelColor
-        helperLabel.translatesAutoresizingMaskIntoConstraints = false
-        footer.addSubview(helperLabel)
-
-        NSLayoutConstraint.activate([
-            quitButton.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
-            quitButton.topAnchor.constraint(equalTo: footer.topAnchor),
-
-            closeButton.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
-            closeButton.topAnchor.constraint(equalTo: footer.topAnchor),
-
-            helperLabel.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
-            helperLabel.topAnchor.constraint(equalTo: quitButton.bottomAnchor, constant: 6),
-            helperLabel.bottomAnchor.constraint(equalTo: footer.bottomAnchor)
-        ])
-
-        return footer
+        helperLabel.alignment = .center
+        container.addSubview(helperLabel)
     }
 
     // MARK: - Public API
@@ -402,7 +318,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     // MARK: - Actions
 
     @objc private func handleForceQuitAction() {
-        // Hide window so the previous application becomes frontmost, then terminate it
         window?.orderOut(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             KillManager.shared.forceQuitFrontmostApp()
