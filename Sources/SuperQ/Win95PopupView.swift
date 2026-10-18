@@ -227,9 +227,12 @@ final class Win95PopupView: NSView {
         let subRect = NSRect(x: textX, y: textYStart - 34, width: availableWidth, height: 15)
         subText.draw(with: subRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: subAttrs)
 
+        let hintColor = isDark
+            ? NSColor(calibratedWhite: 0.82, alpha: 1.0)
+            : NSColor(calibratedWhite: 0.35, alpha: 1.0)
         let hintAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10),
-            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0)
+            .foregroundColor: hintColor
         ]
         let hintText = "Application closed immediately."
         let hintRect = NSRect(x: textX, y: textYStart - 48, width: availableWidth, height: 14)
