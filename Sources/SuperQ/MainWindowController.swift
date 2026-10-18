@@ -31,12 +31,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private var presetPopUp: NSPopUpButton!
     private var soundCheckbox: NSButton!
     private var hudCheckbox: NSButton!
-    private var themePopUp: NSPopUpButton!
+    private var lightThemePopUp: NSPopUpButton!
+    private var darkThemePopUp: NSPopUpButton!
     private var launchAtLoginCheckbox: NSButton!
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 512),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -57,7 +58,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private func setupUI() {
         guard let window = window else { return }
 
-        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: 440, height: 512))
+        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: 440, height: 540))
         window.contentView = container
 
         // 1. Header (y: 16, height: 50)
@@ -72,11 +73,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         let shortcutCard = createShortcutCard(frame: NSRect(x: 20, y: 162, width: 400, height: 122))
         container.addSubview(shortcutCard)
 
-        // 4. Preferences Card (y: 294, height: 140)
-        let preferencesCard = createPreferencesCard(frame: NSRect(x: 20, y: 294, width: 400, height: 140))
+        // 4. Preferences Card (y: 294, height: 168)
+        let preferencesCard = createPreferencesCard(frame: NSRect(x: 20, y: 294, width: 400, height: 168))
         container.addSubview(preferencesCard)
 
-        // 5. Footer (y: 446, height: 54)
+        // 5. Footer (y: 474, height: 54)
         createFooterView(in: container)
 
         updateUI()
@@ -234,24 +235,39 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         hudCheckbox.font = NSFont.systemFont(ofSize: 12)
         card.addSubview(hudCheckbox)
 
-        // Row 3: Pop-up Theme Selector
-        let themeLabel = NSTextField(labelWithString: "Pop-up Theme:")
-        themeLabel.frame = NSRect(x: 14, y: 84, width: 96, height: 20)
-        themeLabel.font = NSFont.systemFont(ofSize: 12)
-        card.addSubview(themeLabel)
+        // Row 3: Light Theme Selector
+        let lightThemeLabel = NSTextField(labelWithString: "Light theme:")
+        lightThemeLabel.frame = NSRect(x: 14, y: 84, width: 96, height: 20)
+        lightThemeLabel.font = NSFont.systemFont(ofSize: 12)
+        card.addSubview(lightThemeLabel)
 
-        themePopUp = NSPopUpButton(frame: NSRect(x: 112, y: 82, width: 274, height: 24), pullsDown: false)
-        themePopUp.target = self
-        themePopUp.action = #selector(handleThemeChanged(_:))
+        lightThemePopUp = NSPopUpButton(frame: NSRect(x: 112, y: 82, width: 274, height: 24), pullsDown: false)
+        lightThemePopUp.target = self
+        lightThemePopUp.action = #selector(handleLightThemeChanged(_:))
         for theme in HUDTheme.allCases {
-            themePopUp.addItem(withTitle: theme.displayName)
-            themePopUp.lastItem?.representedObject = theme
+            lightThemePopUp.addItem(withTitle: theme.displayName)
+            lightThemePopUp.lastItem?.representedObject = theme
         }
-        card.addSubview(themePopUp)
+        card.addSubview(lightThemePopUp)
 
-        // Row 4: Launch at Login Checkbox
+        // Row 4: Dark Theme Selector
+        let darkThemeLabel = NSTextField(labelWithString: "Dark theme:")
+        darkThemeLabel.frame = NSRect(x: 14, y: 112, width: 96, height: 20)
+        darkThemeLabel.font = NSFont.systemFont(ofSize: 12)
+        card.addSubview(darkThemeLabel)
+
+        darkThemePopUp = NSPopUpButton(frame: NSRect(x: 112, y: 110, width: 274, height: 24), pullsDown: false)
+        darkThemePopUp.target = self
+        darkThemePopUp.action = #selector(handleDarkThemeChanged(_:))
+        for theme in HUDTheme.allCases {
+            darkThemePopUp.addItem(withTitle: theme.displayName)
+            darkThemePopUp.lastItem?.representedObject = theme
+        }
+        card.addSubview(darkThemePopUp)
+
+        // Row 5: Launch at Login Checkbox
         launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch SuperQ automatically at login", target: self, action: #selector(handleLaunchAtLoginToggled(_:)))
-        launchAtLoginCheckbox.frame = NSRect(x: 14, y: 112, width: 372, height: 20)
+        launchAtLoginCheckbox.frame = NSRect(x: 14, y: 140, width: 372, height: 20)
         launchAtLoginCheckbox.font = NSFont.systemFont(ofSize: 12)
         card.addSubview(launchAtLoginCheckbox)
 
@@ -260,18 +276,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     private func createFooterView(in container: NSView) {
         let quitButton = NSButton(title: "Quit SuperQ", target: self, action: #selector(handleQuitApp))
-        quitButton.frame = NSRect(x: 20, y: 446, width: 115, height: 32)
+        quitButton.frame = NSRect(x: 20, y: 474, width: 115, height: 32)
         quitButton.bezelStyle = .rounded
         container.addSubview(quitButton)
 
         let closeButton = NSButton(title: "Close Window", target: self, action: #selector(handleCloseWindow))
-        closeButton.frame = NSRect(x: 305, y: 446, width: 115, height: 32)
+        closeButton.frame = NSRect(x: 305, y: 474, width: 115, height: 32)
         closeButton.bezelStyle = .rounded
         closeButton.keyEquivalent = "\u{1b}" // Escape key
         container.addSubview(closeButton)
 
         let helperLabel = NSTextField(labelWithString: "SuperQ remains active in the menu bar when this window is closed.")
-        helperLabel.frame = NSRect(x: 20, y: 484, width: 400, height: 16)
+        helperLabel.frame = NSRect(x: 20, y: 512, width: 400, height: 16)
         helperLabel.font = NSFont.systemFont(ofSize: 10)
         helperLabel.textColor = .secondaryLabelColor
         helperLabel.alignment = .center
@@ -308,8 +324,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         hudCheckbox?.state = settings.isHUDEnabled ? .on : .off
 
         // Theme
-        let currentTheme = settings.currentTheme
-        themePopUp?.selectItem(withTitle: currentTheme.displayName)
+        lightThemePopUp?.selectItem(withTitle: settings.lightTheme.displayName)
+        darkThemePopUp?.selectItem(withTitle: settings.darkTheme.displayName)
 
         // Login
         launchAtLoginCheckbox?.state = settings.isLaunchAtLoginEnabled ? .on : .off
@@ -368,9 +384,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         notifyMenuChanged()
     }
 
-    @objc private func handleThemeChanged(_ sender: NSPopUpButton) {
+    @objc private func handleLightThemeChanged(_ sender: NSPopUpButton) {
         if let theme = sender.selectedItem?.representedObject as? HUDTheme {
-            SettingsManager.shared.currentTheme = theme
+            SettingsManager.shared.lightTheme = theme
+            notifyMenuChanged()
+        }
+    }
+
+    @objc private func handleDarkThemeChanged(_ sender: NSPopUpButton) {
+        if let theme = sender.selectedItem?.representedObject as? HUDTheme {
+            SettingsManager.shared.darkTheme = theme
             notifyMenuChanged()
         }
     }

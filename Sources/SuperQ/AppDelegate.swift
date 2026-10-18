@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleSettingsChanged() {
         buildMenu()
+        MainWindowController.shared.updateUI()
     }
 
     // MARK: - Status Bar Setup
@@ -198,16 +199,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 5b. Theme Submenu
         let themeMenu = NSMenu()
         let currentTheme = SettingsManager.shared.currentTheme
+        let lightTheme = SettingsManager.shared.lightTheme
+        let darkTheme = SettingsManager.shared.darkTheme
+        let isDark = SettingsManager.shared.isSystemInDarkMode
+
+        let activeItem = NSMenuItem(title: "Active: \(currentTheme.displayName) (\(isDark ? "Dark Mode" : "Light Mode"))", action: nil, keyEquivalent: "")
+        activeItem.isEnabled = false
+        themeMenu.addItem(activeItem)
+        themeMenu.addItem(NSMenuItem.separator())
+
+        let lightHeader = NSMenuItem(title: "Light Theme:", action: nil, keyEquivalent: "")
+        lightHeader.isEnabled = false
+        themeMenu.addItem(lightHeader)
 
         for theme in HUDTheme.allCases {
             let item = NSMenuItem(
-                title: theme.displayName,
-                action: #selector(handleSelectTheme(_:)),
+                title: "   " + theme.displayName,
+                action: #selector(handleSelectLightTheme(_:)),
                 keyEquivalent: ""
             )
             item.target = self
             item.representedObject = theme
-            item.state = (theme == currentTheme) ? .on : .off
+            item.state = (theme == lightTheme) ? .on : .off
+            themeMenu.addItem(item)
+        }
+
+        themeMenu.addItem(NSMenuItem.separator())
+
+        let darkHeader = NSMenuItem(title: "Dark Theme:", action: nil, keyEquivalent: "")
+        darkHeader.isEnabled = false
+        themeMenu.addItem(darkHeader)
+
+        for theme in HUDTheme.allCases {
+            let item = NSMenuItem(
+                title: "   " + theme.displayName,
+                action: #selector(handleSelectDarkTheme(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = theme
+            item.state = (theme == darkTheme) ? .on : .off
             themeMenu.addItem(item)
         }
 
@@ -276,9 +307,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainWindowController.shared.updateUI()
     }
 
-    @objc private func handleSelectTheme(_ sender: NSMenuItem) {
+    @objc private func handleSelectLightTheme(_ sender: NSMenuItem) {
         guard let theme = sender.representedObject as? HUDTheme else { return }
-        SettingsManager.shared.currentTheme = theme
+        SettingsManager.shared.lightTheme = theme
+        buildMenu()
+        MainWindowController.shared.updateUI()
+    }
+
+    @objc private func handleSelectDarkTheme(_ sender: NSMenuItem) {
+        guard let theme = sender.representedObject as? HUDTheme else { return }
+        SettingsManager.shared.darkTheme = theme
         buildMenu()
         MainWindowController.shared.updateUI()
     }
