@@ -12,12 +12,13 @@ echo "=== Building Customized SuperQ DMG ==="
 
 # 1. Ensure SuperQ.app exists
 if [ ! -d "$APP_BUNDLE" ]; then
-    "$PROJECT_DIR/scripts/build_app.sh"
+    bash "$PROJECT_DIR/scripts/build_app.sh"
 fi
 
 # 2. Generate PNG background & convert to .background.tiff
 echo "--> Generating background..."
-xcrun swift "$PROJECT_DIR/scripts/generate_dmg_background.swift"
+mkdir -p /tmp/clang-cache
+xcrun swift -module-cache-path /tmp/clang-cache "$PROJECT_DIR/scripts/generate_dmg_background.swift"
 sips -s format tiff "$PROJECT_DIR/Resources/dmg_background.png" --out "$PROJECT_DIR/Resources/.background.tiff" >/dev/null
 
 # 3. Clean up any existing mount points
