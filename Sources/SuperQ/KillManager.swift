@@ -97,6 +97,8 @@ final class KillManager {
         }
     }
 
+    private var activeSound: NSSound?
+
     private func playWindowsChime() {
         let candidatePaths = [
             Bundle.main.path(forResource: "windows-2000-chimes", ofType: "mp3"),
@@ -107,12 +109,14 @@ final class KillManager {
 
         for path in candidatePaths where FileManager.default.fileExists(atPath: path) {
             if let sound = NSSound(contentsOfFile: path, byReference: true) {
+                sound.volume = 0.35
+                activeSound = sound
                 sound.play()
                 return
             } else {
                 let task = Process()
                 task.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-                task.arguments = [path]
+                task.arguments = ["-v", "0.35", path]
                 try? task.run()
                 return
             }
