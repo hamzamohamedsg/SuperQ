@@ -117,6 +117,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hudItem.state = SettingsManager.shared.isHUDEnabled ? .on : .off
         menu.addItem(hudItem)
 
+        // 4b. Theme Submenu
+        let themeMenu = NSMenu()
+        let currentTheme = SettingsManager.shared.currentTheme
+
+        for theme in HUDTheme.allCases {
+            let item = NSMenuItem(
+                title: theme.displayName,
+                action: #selector(handleSelectTheme(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = theme
+            item.state = (theme == currentTheme) ? .on : .off
+            themeMenu.addItem(item)
+        }
+
+        let themeParentItem = NSMenuItem(title: "Pop-up Theme (\(currentTheme.displayName))", action: nil, keyEquivalent: "")
+        themeParentItem.submenu = themeMenu
+        menu.addItem(themeParentItem)
+
         // 5. Launch at Login
         let loginItem = NSMenuItem(
             title: "Launch at Login",
@@ -169,6 +189,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleHUD() {
         SettingsManager.shared.isHUDEnabled.toggle()
+        buildMenu()
+    }
+
+    @objc private func handleSelectTheme(_ sender: NSMenuItem) {
+        guard let theme = sender.representedObject as? HUDTheme else { return }
+        SettingsManager.shared.currentTheme = theme
         buildMenu()
     }
 

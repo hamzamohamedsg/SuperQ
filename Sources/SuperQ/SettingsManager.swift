@@ -62,6 +62,22 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum HUDTheme: String, CaseIterable, Identifiable {
+    case windows95 = "windows95"
+    case modern = "modern"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .windows95:
+            return "Windows 95"
+        case .modern:
+            return "Modern (macOS)"
+        }
+    }
+}
+
 final class SettingsManager {
     static let shared = SettingsManager()
     private let defaults = UserDefaults.standard
@@ -69,6 +85,7 @@ final class SettingsManager {
 
     private let keySoundEnabled = "superq_sound_enabled"
     private let keyHUDEnabled = "superq_hud_enabled"
+    private let keyHUDTheme = "superq_hud_theme"
     private let keyShortcutKeyCode = "superq_shortcut_keycode"
     private let keyShortcutCarbonModifiers = "superq_shortcut_modifiers"
     private let keyShortcutDisplay = "superq_shortcut_display"
@@ -78,6 +95,7 @@ final class SettingsManager {
         defaults.register(defaults: [
             keySoundEnabled: true,
             keyHUDEnabled: true,
+            keyHUDTheme: HUDTheme.windows95.rawValue,
             keyShortcutKeyCode: 12,
             keyShortcutCarbonModifiers: UInt32(cmdKey | shiftKey),
             keyShortcutDisplay: "⇧⌘Q",
@@ -93,6 +111,17 @@ final class SettingsManager {
     var isHUDEnabled: Bool {
         get { defaults.bool(forKey: keyHUDEnabled) }
         set { defaults.set(newValue, forKey: keyHUDEnabled) }
+    }
+
+    var currentTheme: HUDTheme {
+        get {
+            guard let raw = defaults.string(forKey: keyHUDTheme),
+                  let theme = HUDTheme(rawValue: raw) else {
+                return .windows95
+            }
+            return theme
+        }
+        set { defaults.set(newValue.rawValue, forKey: keyHUDTheme) }
     }
 
     var shortcutKeyCode: UInt32 {
