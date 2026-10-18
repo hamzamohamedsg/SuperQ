@@ -3,16 +3,21 @@ import Cocoa
 final class HUDController: NSWindowController {
     static let shared = HUDController()
 
+    // Modern HUD
     private var effectView: NSVisualEffectView!
     private var iconImageView: NSImageView!
     private var titleLabel: NSTextField!
     private var badgeLabel: NSTextField!
     private var subtitleLabel: NSTextField!
+
+    // Windows 95 Retro HUD
+    private var win95View: Win95PopupView!
+
     private var dismissWorkItem: DispatchWorkItem?
 
     private init() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 80),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 146),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -21,7 +26,7 @@ final class HUDController: NSWindowController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
 
         super.init(window: panel)
@@ -35,8 +40,15 @@ final class HUDController: NSWindowController {
     private func setupUI() {
         guard let panel = window else { return }
 
-        // Root visual effect container
-        effectView = NSVisualEffectView(frame: panel.contentView?.bounds ?? .zero)
+        // Setup Windows 95 View
+        win95View = Win95PopupView(frame: NSRect(x: 0, y: 0, width: 380, height: 146))
+        win95View.autoresizingMask = [.width, .height]
+        win95View.onDismiss = { [weak self] in
+            self?.dismissImmediately()
+        }
+
+        // Setup Modern effect view
+        effectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 340, height: 80))
         effectView.autoresizingMask = [.width, .height]
         effectView.material = .hudWindow
         effectView.blendingMode = .behindWindow
@@ -47,7 +59,7 @@ final class HUDController: NSWindowController {
         effectView.layer?.borderWidth = 1.0
         effectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
 
-        // Icon
+        // Modern Icon
         iconImageView = NSImageView(frame: NSRect(x: 18, y: 16, width: 48, height: 48))
         iconImageView.imageScaling = .scaleProportionallyUpOrDown
         iconImageView.wantsLayer = true
@@ -55,7 +67,7 @@ final class HUDController: NSWindowController {
         iconImageView.layer?.masksToBounds = true
         effectView.addSubview(iconImageView)
 
-        // Text container
+        // Modern Text container
         let textContainer = NSView(frame: NSRect(x: 78, y: 16, width: 244, height: 48))
 
         // Title (App Name)
@@ -87,7 +99,9 @@ final class HUDController: NSWindowController {
         textContainer.addSubview(subtitleLabel)
 
         effectView.addSubview(textContainer)
-        panel.contentView = effectView
+
+        // Default content view
+        panel.contentView = win95View
     }
 
     func show(appName: String, appIcon: NSImage?, pid: pid_t) {
@@ -96,55 +110,86 @@ final class HUDController: NSWindowController {
         // Cancel pending dismiss
         dismissWorkItem?.cancel()
 
-        // Configure content
-        titleLabel.stringValue = appName
-        subtitleLabel.stringValue = "Terminated instantly • PID \(pid)"
-        if let icon = appIcon {
-            iconImageView.image = icon
-        } else {
-            iconImageView.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
-        }
-
-        // Adjust badge position dynamically based on title length
-        let maxTitleWidth: CGFloat = 160
-        let measuredWidth = min(titleLabel.attributedStringValue.size().width + 8, maxTitleWidth)
-        titleLabel.frame = NSRect(x: 0, y: 24, width: measuredWidth, height: 22)
-        badgeLabel.frame = NSRect(x: measuredWidth + 6, y: 27, width: 70, height: 16)
-
-        // Center on the active display
         let screen = NSScreen.main ?? NSScreen.screens.first
-        if let screenFrame = screen?.visibleFrame {
-            let x = screenFrame.origin.x + (screenFrame.width - panel.frame.width) / 2
-            let y = screenFrame.origin.y + 90 // Near bottom, above Dock
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        let screenFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        switch SettingsManager.shared.currentTheme {
+        case .windows95:
+            panel.ignoresMouseEvents = false
+            panel.contentView = win95View
+            win95View.configure(appName: appName, appIcon: appIcon, pid: pid)
+
+            let width: CGFloat = 380
+            let height: CGFloat = 146
+            let x = screenFrame.origin.x + (screenFrame.width - width) / 2
+            let y = screenFrame.origin.y + (screenFrame.height - height) / 2
+            panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+
+            // Instant pop-in for authentic retro feel
+            panel.alphaValue = 1.0
+            panel.orderFrontRegardless()
+
+            // Auto-dismiss after 1.8 seconds
+            let workItem = DispatchWorkItem { [weak self, weak panel] in
+                panel?.orderOut(nil)
+                self?.dismissWorkItem = nil
+            }
+            dismissWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
+
+        case .modern:
+            panel.ignoresMouseEvents = true
+            panel.contentView = effectView
+
+            titleLabel.stringValue = appName
+            subtitleLabel.stringValue = "Terminated instantly • PID \(pid)"
+            if let icon = appIcon {
+                iconImageView.image = icon
+            } else {
+                iconImageView.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
+            }
+
+            let maxTitleWidth: CGFloat = 160
+            let measuredWidth = min(titleLabel.attributedStringValue.size().width + 8, maxTitleWidth)
+            titleLabel.frame = NSRect(x: 0, y: 24, width: measuredWidth, height: 22)
+            badgeLabel.frame = NSRect(x: measuredWidth + 6, y: 27, width: 70, height: 16)
+
+            let width: CGFloat = 340
+            let height: CGFloat = 80
+            let x = screenFrame.origin.x + (screenFrame.width - width) / 2
+            let y = screenFrame.origin.y + 90
+            panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+
+            panel.alphaValue = 0.0
+            panel.orderFrontRegardless()
+
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1.0
+            }
+
+            let workItem = DispatchWorkItem { [weak self, weak panel] in
+                guard let panel = panel else { return }
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    panel.animator().alphaValue = 0.0
+                }, completionHandler: {
+                    if panel.alphaValue == 0.0 {
+                        panel.orderOut(nil)
+                    }
+                })
+                self?.dismissWorkItem = nil
+            }
+            dismissWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: workItem)
         }
+    }
 
-        // Present with snappy fade & scale
-        panel.alphaValue = 0.0
-        panel.orderFrontRegardless()
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1.0
-        }
-
-        // Auto dismiss after 0.9s
-        let workItem = DispatchWorkItem { [weak self, weak panel] in
-            guard let panel = panel else { return }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.25
-                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                panel.animator().alphaValue = 0.0
-            }, completionHandler: {
-                if panel.alphaValue == 0.0 {
-                    panel.orderOut(nil)
-                }
-            })
-            self?.dismissWorkItem = nil
-        }
-
-        dismissWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: workItem)
+    func dismissImmediately() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+        window?.orderOut(nil)
     }
 }
