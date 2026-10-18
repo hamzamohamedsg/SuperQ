@@ -122,20 +122,34 @@ final class HUDController: NSWindowController {
             let width: CGFloat = 380
             let height: CGFloat = 146
             let x = screenFrame.origin.x + (screenFrame.width - width) / 2
-            let y = screenFrame.origin.y + (screenFrame.height - height) / 2
+            let y = screenFrame.origin.y + 90
             panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
 
-            // Instant pop-in for authentic retro feel
-            panel.alphaValue = 1.0
+            panel.alphaValue = 0.0
             panel.orderFrontRegardless()
 
-            // Auto-dismiss after 1.8 seconds
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1.0
+            }
+
+            // Auto-dismiss after 0.9 seconds with quick fade out (matching modern HUD)
             let workItem = DispatchWorkItem { [weak self, weak panel] in
-                panel?.orderOut(nil)
+                guard let panel = panel else { return }
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    panel.animator().alphaValue = 0.0
+                }, completionHandler: {
+                    if panel.alphaValue == 0.0 {
+                        panel.orderOut(nil)
+                    }
+                })
                 self?.dismissWorkItem = nil
             }
             dismissWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: workItem)
 
         case .modern:
             panel.ignoresMouseEvents = true
@@ -190,6 +204,15 @@ final class HUDController: NSWindowController {
     func dismissImmediately() {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
-        window?.orderOut(nil)
+        guard let panel = window else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0.0
+        }, completionHandler: {
+            if panel.alphaValue == 0.0 {
+                panel.orderOut(nil)
+            }
+        })
     }
 }
