@@ -50,7 +50,7 @@ final class Win95PopupView: NSView {
         // 2. Title Bar Frame and Close Button geometry
         let titleBarRect = NSRect(x: 3, y: bounds.height - 23, width: bounds.width - 6, height: 20)
         closeButtonFrame = NSRect(x: bounds.width - 21, y: bounds.height - 21, width: 16, height: 16)
-        okButtonFrame = NSRect(x: (bounds.width - 75) / 2, y: 12, width: 75, height: 23)
+        okButtonFrame = NSRect(x: (bounds.width - 68) / 2, y: 11, width: 68, height: 21)
 
         // 3. Draw Title Bar
         drawTitleBar(in: titleBarRect)
@@ -59,7 +59,7 @@ final class Win95PopupView: NSView {
         drawCloseButton(in: closeButtonFrame, isPressed: isClosePressed)
 
         // 5. Draw Critical Error Stop Icon
-        let iconRect = NSRect(x: 18, y: bounds.height - 76, width: 34, height: 34)
+        let iconRect = NSRect(x: 16, y: bounds.height - 68, width: 30, height: 30)
         drawStopIcon(in: iconRect)
 
         // 6. Draw Content Text
@@ -182,7 +182,7 @@ final class Win95PopupView: NSView {
         path.lineWidth = 1.0
         path.stroke()
 
-        let xInset: CGFloat = 8.0
+        let xInset: CGFloat = 7.0
         let xRect = circleRect.insetBy(dx: xInset, dy: xInset)
 
         let xPath = NSBezierPath()
@@ -193,7 +193,7 @@ final class Win95PopupView: NSView {
 
         NSGraphicsContext.saveGraphicsState()
         darkRed.setStroke()
-        xPath.lineWidth = 4.5
+        xPath.lineWidth = 4.0
         xPath.lineCapStyle = .square
         var transform = AffineTransform()
         transform.translate(x: 1, y: -1)
@@ -207,16 +207,16 @@ final class Win95PopupView: NSView {
     }
 
     private func drawContentText(in bounds: NSRect) {
-        let textX: CGFloat = 66.0
-        let textYStart = bounds.height - 38.0
-        let availableWidth = bounds.width - textX - 16.0
+        let textX: CGFloat = 58.0
+        let textYStart = bounds.height - 34.0
+        let availableWidth = bounds.width - textX - 14.0
 
         let titleAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.boldSystemFont(ofSize: 12),
             .foregroundColor: NSColor.black
         ]
         let titleText = "\(appName) was terminated."
-        let titleRect = NSRect(x: textX, y: textYStart - 18, width: availableWidth, height: 18)
+        let titleRect = NSRect(x: textX, y: textYStart - 17, width: availableWidth, height: 17)
         titleText.draw(with: titleRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: titleAttrs)
 
         let subAttrs: [NSAttributedString.Key: Any] = [
@@ -224,7 +224,7 @@ final class Win95PopupView: NSView {
             .foregroundColor: NSColor.black
         ]
         let subText = "Process ID: \(pid)  •  Status: SIGKILL"
-        let subRect = NSRect(x: textX, y: textYStart - 36, width: availableWidth, height: 16)
+        let subRect = NSRect(x: textX, y: textYStart - 34, width: availableWidth, height: 15)
         subText.draw(with: subRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: subAttrs)
 
         let hintAttrs: [NSAttributedString.Key: Any] = [
@@ -232,7 +232,7 @@ final class Win95PopupView: NSView {
             .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0)
         ]
         let hintText = "Application closed immediately."
-        let hintRect = NSRect(x: textX, y: textYStart - 52, width: availableWidth, height: 14)
+        let hintRect = NSRect(x: textX, y: textYStart - 48, width: availableWidth, height: 14)
         hintText.draw(with: hintRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: hintAttrs)
     }
 

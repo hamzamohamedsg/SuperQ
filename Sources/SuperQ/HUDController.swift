@@ -17,7 +17,7 @@ final class HUDController: NSWindowController {
 
     private init() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 146),
+            contentRect: NSRect(x: 0, y: 0, width: 334, height: 128),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -41,7 +41,7 @@ final class HUDController: NSWindowController {
         guard let panel = window else { return }
 
         // Setup Windows 95 View
-        win95View = Win95PopupView(frame: NSRect(x: 0, y: 0, width: 380, height: 146))
+        win95View = Win95PopupView(frame: NSRect(x: 0, y: 0, width: 334, height: 128))
         win95View.autoresizingMask = [.width, .height]
         win95View.onDismiss = { [weak self] in
             self?.dismissImmediately()
@@ -119,8 +119,8 @@ final class HUDController: NSWindowController {
             panel.contentView = win95View
             win95View.configure(appName: appName, appIcon: appIcon, pid: pid)
 
-            let width: CGFloat = 380
-            let height: CGFloat = 146
+            let width: CGFloat = 334
+            let height: CGFloat = 128
             let x = screenFrame.origin.x + (screenFrame.width - width) / 2
             let y = screenFrame.origin.y + 90
             panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
