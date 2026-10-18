@@ -6,6 +6,14 @@ final class Win95PopupView: NSView {
     private var appName: String = "Application"
     private var pid: pid_t = 0
     private var appIcon: NSImage?
+    var isDark: Bool = false
+
+    private var standardGray: NSColor {
+        // Dock sampled exact gray from screenshot: #494949 (73, 73, 73)
+        isDark
+            ? NSColor(calibratedRed: 73/255, green: 73/255, blue: 73/255, alpha: 1.0)
+            : NSColor(calibratedRed: 192/255, green: 192/255, blue: 192/255, alpha: 1.0)
+    }
 
     private var closeButtonFrame: NSRect = .zero
     private var okButtonFrame: NSRect = .zero
@@ -21,10 +29,11 @@ final class Win95PopupView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(appName: String, appIcon: NSImage?, pid: pid_t) {
+    func configure(appName: String, appIcon: NSImage?, pid: pid_t, isDark: Bool = false) {
         self.appName = appName
         self.appIcon = appIcon
         self.pid = pid
+        self.isDark = isDark
         self.isClosePressed = false
         self.isOKPressed = false
         needsDisplay = true
@@ -61,7 +70,7 @@ final class Win95PopupView: NSView {
     }
 
     private func drawWindowBevel(in bounds: NSRect) {
-        let bg = NSColor(calibratedRed: 192/255, green: 192/255, blue: 192/255, alpha: 1.0)
+        let bg = standardGray
         bg.setFill()
         bounds.fill()
 
@@ -117,7 +126,7 @@ final class Win95PopupView: NSView {
     }
 
     private func drawCloseButton(in rect: NSRect, isPressed: Bool) {
-        let face = NSColor(calibratedRed: 192/255, green: 192/255, blue: 192/255, alpha: 1.0)
+        let face = standardGray
         face.setFill()
         rect.fill()
 
@@ -228,7 +237,7 @@ final class Win95PopupView: NSView {
     }
 
     private func drawOKButton(in rect: NSRect, isPressed: Bool) {
-        let face = NSColor(calibratedRed: 192/255, green: 192/255, blue: 192/255, alpha: 1.0)
+        let face = standardGray
         face.setFill()
         rect.fill()
 
