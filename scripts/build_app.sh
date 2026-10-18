@@ -15,8 +15,10 @@ mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
 
 echo "--> Compiling Swift sources..."
+mkdir -p /tmp/clang-cache
 xcrun swiftc \
     -O \
+    -module-cache-path /tmp/clang-cache \
     -target arm64-apple-macos13.0 \
     "$PROJECT_DIR/Sources/SuperQ/"*.swift \
     -o "$MACOS_DIR/SuperQ"
@@ -26,6 +28,11 @@ cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 
 echo "--> Copying AppIcon.icns..."
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+
+if [ -f "$PROJECT_DIR/Resources/windows-2000-chimes.mp3" ]; then
+    echo "--> Copying windows-2000-chimes.mp3..."
+    cp "$PROJECT_DIR/Resources/windows-2000-chimes.mp3" "$RESOURCES_DIR/windows-2000-chimes.mp3"
+fi
 
 echo "--> Signing application bundle..."
 codesign --force --deep --sign - "$APP_BUNDLE"

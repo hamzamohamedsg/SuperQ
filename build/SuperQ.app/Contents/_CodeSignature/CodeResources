@@ -8,6 +8,10 @@
 		<data>
 		BT+G1GAhJLn3enCya3k8OWipscQ=
 		</data>
+		<key>Resources/windows-2000-chimes.mp3</key>
+		<data>
+		lfrG6SaEaUSMT/EXele47ggYwgE=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -16,6 +20,13 @@
 			<key>hash2</key>
 			<data>
 			yweZkMIidxoSF8X4EnTvjYtmpZHhTNdDaXfAsEhDxXY=
+			</data>
+		</dict>
+		<key>Resources/windows-2000-chimes.mp3</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			T8ozGhMeNjVpwceStz7ZuROl9ytpOXn3U2QX3Pt/IyI=
 			</data>
 		</dict>
 	</dict>
