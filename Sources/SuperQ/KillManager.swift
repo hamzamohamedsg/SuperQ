@@ -90,7 +90,7 @@ final class KillManager {
     }
 
     private func playKillSound() {
-        if SettingsManager.shared.currentTheme == .windows95 {
+        if SettingsManager.shared.currentTheme.isWindows {
             playWindowsChime()
         } else {
             playModernSound()

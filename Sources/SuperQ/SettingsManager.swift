@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import ServiceManagement
 import Carbon
 import os
@@ -64,6 +65,7 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 
 enum HUDTheme: String, CaseIterable, Identifiable {
     case windows95 = "windows95"
+    case windows95Dark = "windows95_dark"
     case modern = "modern"
 
     var id: String { rawValue }
@@ -71,9 +73,20 @@ enum HUDTheme: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .windows95:
-            return "Windows 95"
+            return "Windows 95 Light"
+        case .windows95Dark:
+            return "Windows 95 Dark"
         case .modern:
             return "Modern (macOS)"
+        }
+    }
+
+    var isWindows: Bool {
+        switch self {
+        case .windows95, .windows95Dark:
+            return true
+        case .modern:
+            return false
         }
     }
 }
@@ -86,6 +99,8 @@ final class SettingsManager {
     private let keySoundEnabled = "superq_sound_enabled"
     private let keyHUDEnabled = "superq_hud_enabled"
     private let keyHUDTheme = "superq_hud_theme"
+    private let keyHUDLightTheme = "superq_hud_light_theme"
+    private let keyHUDDarkTheme = "superq_hud_dark_theme"
     private let keyShortcutKeyCode = "superq_shortcut_keycode"
     private let keyShortcutCarbonModifiers = "superq_shortcut_modifiers"
     private let keyShortcutDisplay = "superq_shortcut_display"
@@ -96,11 +111,23 @@ final class SettingsManager {
             keySoundEnabled: true,
             keyHUDEnabled: true,
             keyHUDTheme: HUDTheme.windows95.rawValue,
+            keyHUDLightTheme: HUDTheme.windows95.rawValue,
+            keyHUDDarkTheme: HUDTheme.windows95Dark.rawValue,
             keyShortcutKeyCode: 12,
             keyShortcutCarbonModifiers: UInt32(cmdKey | shiftKey),
             keyShortcutDisplay: "⇧⌘Q",
             keyShortcutPresetId: ShortcutPreset.shiftCmdQ.rawValue
         ])
+
+        // Live system appearance observer: update theme when macOS light/dark mode switches
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.logger.info("macOS appearance changed, switching theme live")
+            NotificationCenter.default.post(name: NSNotification.Name("SuperQSettingsChanged"), object: nil)
+        }
     }
 
     var isSoundEnabled: Bool {
@@ -113,15 +140,52 @@ final class SettingsManager {
         set { defaults.set(newValue, forKey: keyHUDEnabled) }
     }
 
-    var currentTheme: HUDTheme {
+    var lightTheme: HUDTheme {
         get {
-            guard let raw = defaults.string(forKey: keyHUDTheme),
+            guard let raw = defaults.string(forKey: keyHUDLightTheme),
                   let theme = HUDTheme(rawValue: raw) else {
                 return .windows95
             }
             return theme
         }
-        set { defaults.set(newValue.rawValue, forKey: keyHUDTheme) }
+        set {
+            defaults.set(newValue.rawValue, forKey: keyHUDLightTheme)
+            NotificationCenter.default.post(name: NSNotification.Name("SuperQSettingsChanged"), object: nil)
+        }
+    }
+
+    var darkTheme: HUDTheme {
+        get {
+            guard let raw = defaults.string(forKey: keyHUDDarkTheme),
+                  let theme = HUDTheme(rawValue: raw) else {
+                return .windows95Dark
+            }
+            return theme
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: keyHUDDarkTheme)
+            NotificationCenter.default.post(name: NSNotification.Name("SuperQSettingsChanged"), object: nil)
+        }
+    }
+
+    var isSystemInDarkMode: Bool {
+        if let appearance = NSApp?.effectiveAppearance {
+            return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    }
+
+    var currentTheme: HUDTheme {
+        get {
+            return isSystemInDarkMode ? darkTheme : lightTheme
+        }
+        set {
+            if isSystemInDarkMode {
+                darkTheme = newValue
+            } else {
+                lightTheme = newValue
+            }
+        }
     }
 
     var shortcutKeyCode: UInt32 {

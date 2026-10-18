@@ -114,10 +114,11 @@ final class HUDController: NSWindowController {
         let screenFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
         switch SettingsManager.shared.currentTheme {
-        case .windows95:
+        case .windows95, .windows95Dark:
+            let isDark = (SettingsManager.shared.currentTheme == .windows95Dark)
             panel.ignoresMouseEvents = false
             panel.contentView = win95View
-            win95View.configure(appName: appName, appIcon: appIcon, pid: pid)
+            win95View.configure(appName: appName, appIcon: appIcon, pid: pid, isDark: isDark)
 
             let width: CGFloat = 334
             let height: CGFloat = 128
