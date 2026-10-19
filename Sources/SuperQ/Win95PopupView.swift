@@ -6,6 +6,7 @@ final class Win95PopupView: NSView {
     private var appName: String = "Application"
     private var pid: pid_t = 0
     private var appIcon: NSImage?
+    private var killedCount: Int = 1
     var isDark: Bool = false
 
     private var standardGray: NSColor {
@@ -29,11 +30,12 @@ final class Win95PopupView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(appName: String, appIcon: NSImage?, pid: pid_t, isDark: Bool = false) {
+    func configure(appName: String, appIcon: NSImage?, pid: pid_t, isDark: Bool = false, killedCount: Int = 1) {
         self.appName = appName
         self.appIcon = appIcon
         self.pid = pid
         self.isDark = isDark
+        self.killedCount = killedCount
         self.isClosePressed = false
         self.isOKPressed = false
         needsDisplay = true
@@ -223,7 +225,9 @@ final class Win95PopupView: NSView {
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: NSColor.black
         ]
-        let subText = "Process ID: \(pid)  •  Status: SIGKILL"
+        let subText = killedCount > 1
+            ? "Process ID: \(pid)  •  \(killedCount) processes killed"
+            : "Process ID: \(pid)  •  Status: SIGKILL"
         let subRect = NSRect(x: textX, y: textYStart - 34, width: availableWidth, height: 15)
         subText.draw(with: subRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: subAttrs)
 
@@ -234,7 +238,9 @@ final class Win95PopupView: NSView {
             .font: NSFont.systemFont(ofSize: 10),
             .foregroundColor: hintColor
         ]
-        let hintText = "Application closed immediately."
+        let hintText = killedCount > 1
+            ? "Program and all background processes closed."
+            : "Application closed immediately."
         let hintRect = NSRect(x: textX, y: textYStart - 48, width: availableWidth, height: 14)
         hintText.draw(with: hintRect, options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin], attributes: hintAttrs)
     }

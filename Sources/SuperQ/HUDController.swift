@@ -22,12 +22,12 @@ final class HUDController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        panel.level = .floating
+        panel.level = .screenSaver
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.ignoresMouseEvents = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
 
         super.init(window: panel)
         setupUI()
@@ -104,7 +104,7 @@ final class HUDController: NSWindowController {
         panel.contentView = win95View
     }
 
-    func show(appName: String, appIcon: NSImage?, pid: pid_t) {
+    func show(appName: String, appIcon: NSImage?, pid: pid_t, killedCount: Int = 1) {
         guard let panel = window else { return }
 
         // Cancel pending dismiss
@@ -118,7 +118,7 @@ final class HUDController: NSWindowController {
             let isDark = (SettingsManager.shared.currentTheme == .windows95Dark)
             panel.ignoresMouseEvents = false
             panel.contentView = win95View
-            win95View.configure(appName: appName, appIcon: appIcon, pid: pid, isDark: isDark)
+            win95View.configure(appName: appName, appIcon: appIcon, pid: pid, isDark: isDark, killedCount: killedCount)
 
             let width: CGFloat = 334
             let height: CGFloat = 128
@@ -157,7 +157,9 @@ final class HUDController: NSWindowController {
             panel.contentView = effectView
 
             titleLabel.stringValue = appName
-            subtitleLabel.stringValue = "Terminated instantly • PID \(pid)"
+            subtitleLabel.stringValue = killedCount > 1
+                ? "Terminated with \(killedCount) processes"
+                : "Terminated instantly • PID \(pid)"
             if let icon = appIcon {
                 iconImageView.image = icon
             } else {
@@ -167,7 +169,11 @@ final class HUDController: NSWindowController {
             let maxTitleWidth: CGFloat = 160
             let measuredWidth = min(titleLabel.attributedStringValue.size().width + 8, maxTitleWidth)
             titleLabel.frame = NSRect(x: 0, y: 24, width: measuredWidth, height: 22)
-            badgeLabel.frame = NSRect(x: measuredWidth + 6, y: 27, width: 70, height: 16)
+
+            let badgeText = killedCount > 1 ? "\(killedCount) KILLED" : "FORCE QUIT"
+            badgeLabel.stringValue = badgeText
+            let badgeWidth = max(70, badgeLabel.attributedStringValue.size().width + 12)
+            badgeLabel.frame = NSRect(x: measuredWidth + 6, y: 27, width: badgeWidth, height: 16)
 
             let width: CGFloat = 340
             let height: CGFloat = 80
