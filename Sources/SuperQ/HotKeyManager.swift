@@ -115,7 +115,7 @@ final class HotKeyManager {
     // MARK: - CGEventTap for swallowing key events & working inside full-screen games
 
     private func registerEventTap(keyCode targetKeyCode: UInt32, carbonModifiers targetMods: UInt32) {
-        let mask = (1 << CGEventType.keyDown.rawValue)
+        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
 
         let callback: CGEventTapCallBack = { proxy, type, event, refcon in
             guard let refcon = refcon else { return Unmanaged.passRetained(event) }
@@ -129,7 +129,7 @@ final class HotKeyManager {
                 return Unmanaged.passRetained(event)
             }
 
-            if type == .keyDown {
+            if type == .keyDown || type == .keyUp {
                 let eventKeyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 let flags = event.flags
 
@@ -148,9 +148,11 @@ final class HotKeyManager {
                 if flags.contains(.maskControl) != reqCtrl { matches = false }
 
                 if matches {
-                    manager.logger.notice("CGEventTap intercepted and consumed shortcut!")
-                    manager.triggerAction()
-                    // Return nil to swallow event completely
+                    if type == .keyDown {
+                        manager.logger.notice("CGEventTap intercepted and consumed shortcut!")
+                        manager.triggerAction()
+                    }
+                    // Return nil to completely swallow both keyDown and keyUp so macOS never sees Shift+Cmd+Q
                     return nil
                 }
             }
