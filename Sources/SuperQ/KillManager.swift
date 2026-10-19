@@ -129,6 +129,11 @@ final class KillManager {
 
     // MARK: - Frontmost / Full-Screen Target Resolution
 
+    private let overlayOwners: Set<String> = [
+        "Steam Helper", "steam_osx", "gameoverlayrenderer",
+        "Discord Overlay", "GeForceNOW", "OriginThinSetupInternal"
+    ]
+
     private func resolveFrontmostTarget() -> TargetProcessInfo? {
         let myPid = ProcessInfo.processInfo.processIdentifier
 
@@ -139,9 +144,33 @@ final class KillManager {
             "universalAccessAuthWarn", "SuperQ"
         ]
 
-        // 1. CoreGraphics On-Screen Window List (inspects true frontmost window in Z-order)
+        // 1. Accessibility Focused Application (The app currently receiving keyboard inputs)
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedAppValue: AnyObject?
+        if AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedAppValue) == .success,
+           let focusedApp = focusedAppValue {
+            var axPid: pid_t = 0
+            if AXUIElementGetPid(focusedApp as! AXUIElement, &axPid) == .success, axPid != myPid && axPid > 1 {
+                let axName = getProcessPath(pid: axPid).map { ($0 as NSString).lastPathComponent } ?? ""
+                if !ignoredOwners.contains(axName) && !overlayOwners.contains(axName) && axName != "Finder" {
+                    if let target = makeTargetInfo(pid: axPid, fallbackName: axName.isEmpty ? "Focused Application" : axName) {
+                        logger.notice("Found AX focused target: \(target.name, privacy: .public) (PID: \(target.pid))")
+                        return target
+                    }
+                }
+            }
+        }
+
+        // 2. CoreGraphics On-Screen Window List (inspects true frontmost window in Z-order)
         // Works for full screen games, Metal/OpenGL exclusive modes, SDL2, Wine, emulators
         if let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[CFString: Any]] {
+            struct CandidateWindow {
+                let pid: pid_t
+                let owner: String
+                let layer: Int
+            }
+
+            var candidates: [CandidateWindow] = []
             for w in infoList {
                 guard let pid = w[kCGWindowOwnerPID] as? pid_t,
                       let owner = w[kCGWindowOwnerName] as? String,
@@ -157,25 +186,20 @@ final class KillManager {
                 if alpha < 0.05 { continue }
                 if bounds.width < 80 || bounds.height < 80 { continue }
 
-                // Found top visible application/game window
-                if let target = makeTargetInfo(pid: pid, fallbackName: owner) {
-                    logger.notice("Found on-screen window target: \(target.name) (PID: \(target.pid), layer: \(layer))")
-                    return target
-                }
+                candidates.append(CandidateWindow(pid: pid, owner: owner, layer: layer))
             }
-        }
 
-        // 2. Accessibility Focused Application
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedAppValue: AnyObject?
-        if AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedAppValue) == .success,
-           let focusedApp = focusedAppValue {
-            var axPid: pid_t = 0
-            if AXUIElementGetPid(focusedApp as! AXUIElement, &axPid) == .success, axPid != myPid && axPid > 1 {
-                if let target = makeTargetInfo(pid: axPid, fallbackName: "Focused Application") {
-                    logger.notice("Found AX focused target: \(target.name) (PID: \(target.pid))")
-                    return target
-                }
+            // If the top window is an in-game overlay (e.g. Steam Helper), prioritize the real game window underneath it
+            let selectedCandidate: CandidateWindow?
+            if let nonOverlay = candidates.first(where: { !self.overlayOwners.contains($0.owner) && $0.owner != "Finder" }) {
+                selectedCandidate = nonOverlay
+            } else {
+                selectedCandidate = candidates.first
+            }
+
+            if let chosen = selectedCandidate, let target = makeTargetInfo(pid: chosen.pid, fallbackName: chosen.owner) {
+                logger.notice("Found on-screen window target: \(target.name, privacy: .public) (PID: \(target.pid), layer: \(chosen.layer))")
+                return target
             }
         }
 
@@ -346,6 +370,40 @@ final class KillManager {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // 4b. Collect any process matching active game keywords (executable name, app id, or game folder)
+        var gameKeywords: [String] = []
+        for checkPid in [targetPid, currentAncestor] {
+            var checkStrings = getProcessArgs(pid: checkPid)
+            if let p = pidToPath[checkPid] { checkStrings.append(p) }
+            for str in checkStrings {
+                if let range = str.range(of: "steamapps/common/") {
+                    let folder = str[range.upperBound...].components(separatedBy: "/").first ?? ""
+                    if !folder.isEmpty && !gameKeywords.contains(folder) { gameKeywords.append(folder) }
+                }
+                if let range = str.range(of: "compatdata/") {
+                    let appId = str[range.upperBound...].components(separatedBy: "/").first ?? ""
+                    if !appId.isEmpty && !gameKeywords.contains(appId) { gameKeywords.append(appId) }
+                }
+                if str.hasSuffix(".exe") {
+                    let exe = (str as NSString).lastPathComponent
+                    if !gameKeywords.contains(exe) { gameKeywords.append(exe) }
+                }
+            }
+        }
+
+        if !gameKeywords.isEmpty {
+            for (p, path) in pidToPath {
+                let pArgs = getProcessArgs(pid: p)
+                let allPStrings = [path] + pArgs
+                for kw in gameKeywords {
+                    if allPStrings.contains(where: { $0.contains(kw) }) {
+                        resolvedPids.insert(p)
+                        break
                     }
                 }
             }
