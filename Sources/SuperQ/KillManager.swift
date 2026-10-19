@@ -92,13 +92,18 @@ final class KillManager {
             }
         }
 
-        // 2. Terminate entire process group if target was group leader
+        // 2. Terminate entire process group if valid non-system group
         var bsdInfo = proc_bsdinfo()
         let size = proc_pidinfo(target.pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size))
         if size == MemoryLayout<proc_bsdinfo>.size {
             let pgid = pid_t(bsdInfo.pbi_pgid)
-            if pgid == target.pid && pgid > 1 {
-                kill(-pgid, SIGKILL)
+            if pgid > 1 && pgid != currentPid && pgid != getppid() {
+                var leaderPath = [CChar](repeating: 0, count: 4096)
+                let ret = proc_pidpath(pgid, &leaderPath, UInt32(leaderPath.count))
+                let leaderName = ret > 0 ? (String(cString: leaderPath) as NSString).lastPathComponent : ""
+                if !launcherOrSystemProcesses.contains(leaderName) {
+                    kill(-pgid, SIGKILL)
+                }
             }
         }
 
@@ -227,7 +232,24 @@ final class KillManager {
             }
         }
 
-        let name = execPath.map { ($0 as NSString).lastPathComponent } ?? fallbackName
+        var name = execPath.map { ($0 as NSString).lastPathComponent } ?? fallbackName
+
+        // If the process is a runner like wine, inspect arguments for the real game executable
+        let lowerName = name.lowercased()
+        if lowerName.contains("wine") || lowerName.contains("crossover") || lowerName.contains("proton") || lowerName == "python" || lowerName == "sh" || lowerName == "bash" {
+            let args = getProcessArgs(pid: pid)
+            for arg in args {
+                if arg.hasSuffix(".exe") || arg.hasSuffix(".app") {
+                    let exeName = (arg as NSString).lastPathComponent
+                    let clean = exeName.replacingOccurrences(of: ".exe", with: "")
+                    if !clean.isEmpty {
+                        name = clean
+                        break
+                    }
+                }
+            }
+        }
+
         return TargetProcessInfo(
             pid: pid,
             name: name,
@@ -238,6 +260,12 @@ final class KillManager {
     }
 
     // MARK: - Related & Background Process Discovery
+
+    private let launcherOrSystemProcesses: Set<String> = [
+        "launchd", "WindowServer", "Window Server", "loginwindow", "Dock",
+        "Finder", "Steam", "steam_osx", "Terminal", "iTerm2", "Ghostty",
+        "Alacritty", "kitty", "zsh", "bash", "sh", "fish", "SuperQ"
+    ]
 
     private func findRelatedProcesses(for targetPid: pid_t, bundleURL: URL?, bundleIdentifier: String?) -> Set<pid_t> {
         let myPid = ProcessInfo.processInfo.processIdentifier
@@ -264,20 +292,18 @@ final class KillManager {
 
         var resolvedPids: Set<pid_t> = [targetPid]
 
-        // 1. Determine app bundle path
-        var bundlePath = bundleURL?.path
-        if bundlePath == nil, let execPath = pidToPath[targetPid] {
-            bundlePath = extractBundlePath(from: execPath)
-        }
-
-        // 2. Check if target process has a parent inside the same app bundle / directory
-        if let ppid = parentMap[targetPid], ppid > 1 {
-            if let bp = bundlePath, let parentPath = pidToPath[ppid], parentPath.hasPrefix(bp) {
-                resolvedPids.insert(ppid)
+        // 1. Climb up to find session root (stopping at client/system launchers like Steam or Finder)
+        var currentAncestor = targetPid
+        while let ppid = parentMap[currentAncestor], ppid > 1 {
+            let pName = pidToPath[ppid].map { ($0 as NSString).lastPathComponent } ?? ""
+            if launcherOrSystemProcesses.contains(pName) {
+                break
             }
+            resolvedPids.insert(ppid)
+            currentAncestor = ppid
         }
 
-        // 3. Collect all descendant processes (children, grandchildren, etc.)
+        // 2. Collect all descendant processes of all ancestors/roots (descendants of session root)
         var queue = Array(resolvedPids)
         while !queue.isEmpty {
             let current = queue.removeFirst()
@@ -291,11 +317,36 @@ final class KillManager {
             }
         }
 
-        // 4. Collect all processes executing from inside the same app bundle directory
+        // 3. Collect all processes executing from inside the same app bundle directory
+        var bundlePath = bundleURL?.path
+        if bundlePath == nil, let execPath = pidToPath[targetPid] {
+            bundlePath = extractBundlePath(from: execPath)
+        }
+
         if let bp = bundlePath {
             for (p, path) in pidToPath {
                 if path.hasPrefix(bp + "/") || path == bp {
                     resolvedPids.insert(p)
+                }
+            }
+        }
+
+        // 4. Collect processes running from the same runner or game prefix directory (Wine/Proton/Steam)
+        for checkPid in [targetPid, currentAncestor] {
+            if let path = pidToPath[checkPid] {
+                for marker in ["/runners/", "/compatdata/", "/steamapps/common/"] {
+                    if let range = path.range(of: marker) {
+                        let afterMarker = path[range.upperBound...]
+                        let folderName = afterMarker.components(separatedBy: "/").first ?? ""
+                        if !folderName.isEmpty {
+                            let prefixDir = String(path[..<range.upperBound]) + folderName
+                            for (p, pPath) in pidToPath {
+                                if pPath.hasPrefix(prefixDir) {
+                                    resolvedPids.insert(p)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -308,11 +359,14 @@ final class KillManager {
             }
         }
 
-        // 6. Collect processes in same process group if target was group leader
-        if let targetPgid = pidToPgid[targetPid], targetPgid == targetPid, targetPgid > 1 {
-            for (p, pgid) in pidToPgid {
-                if pgid == targetPgid {
-                    resolvedPids.insert(p)
+        // 6. Collect processes in same process group (if not system daemon)
+        if let targetPgid = pidToPgid[targetPid], targetPgid > 1, targetPgid != myPid && targetPgid != myPpid {
+            let leaderName = pidToPath[targetPgid].map { ($0 as NSString).lastPathComponent } ?? ""
+            if !launcherOrSystemProcesses.contains(leaderName) {
+                for (p, pgid) in pidToPgid {
+                    if pgid == targetPgid {
+                        resolvedPids.insert(p)
+                    }
                 }
             }
         }
@@ -370,6 +424,34 @@ final class KillManager {
             return String(executablePath[..<bundleEndIndex])
         }
         return nil
+    }
+
+    private func getProcessArgs(pid: pid_t) -> [String] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        if sysctl(&mib, 3, nil, &size, nil, 0) != 0 || size == 0 {
+            return []
+        }
+        var buffer = [CChar](repeating: 0, count: size)
+        if sysctl(&mib, 3, &buffer, &size, nil, 0) != 0 {
+            return []
+        }
+        var argc: Int32 = 0
+        memcpy(&argc, buffer, MemoryLayout<Int32>.size)
+        var offset = MemoryLayout<Int32>.size
+        while offset < size && buffer[offset] != 0 { offset += 1 }
+        while offset < size && buffer[offset] == 0 { offset += 1 }
+        var args: [String] = []
+        while offset < size && args.count < Int(argc) {
+            let start = offset
+            while offset < size && buffer[offset] != 0 { offset += 1 }
+            if offset > start {
+                let str = String(cString: Array(buffer[start...offset]))
+                args.append(str)
+            }
+            offset += 1
+        }
+        return args
     }
 
     // MARK: - Audio Feedback
